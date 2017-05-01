@@ -1,6 +1,7 @@
 package smalltalk.compiler;
 
 import org.antlr.symtab.Scope;
+import org.antlr.symtab.VariableSymbol;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -83,6 +84,11 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitNamedMethod(SmalltalkParser.NamedMethodContext ctx) {
         pushScope(ctx.scope);
         Code code = visit(ctx.methodBlock());
+        code = aggregateResult(code, Code.of(
+                Bytecode.POP,
+                Bytecode.SELF,
+                Bytecode.RETURN
+        ));
 
         ((STMethod) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         ((STMethod) currentScope).compiledBlock.bytecode = code.bytes();
@@ -112,7 +118,9 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
      */
     @Override
     public Code visitFullBody(SmalltalkParser.FullBodyContext ctx) {
-        visit(ctx.localVars());
+        if (ctx.localVars() != null) {
+            visit(ctx.localVars());
+        }
         Code code = Code.None;
         for (SmalltalkParser.StatContext statContext : ctx.stat()) {
             code = aggregateResult(code, visit(statContext));
@@ -130,8 +138,11 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitLvalue(SmalltalkParser.LvalueContext ctx) {
-        Code code = visit(ctx.ID());
-        return code;
+        VariableSymbol variableSymbol = (VariableSymbol) currentScope.resolve(ctx.ID().getText());
+        if (variableSymbol instanceof STField) {
+            return Code.of(Bytecode.STORE_FIELD, (short) 0, (short) 0);
+        }
+        return Code.None;
     }
 
     @Override
