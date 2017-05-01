@@ -51,6 +51,19 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     }
 
     @Override
+    public Code visitMain(SmalltalkParser.MainContext ctx) {
+        currentClassScope = ctx.classScope;
+        pushScope(ctx.scope);
+        Code code = visit(ctx.body());
+
+        ((STBlock) currentScope).compiledBlock.bytecode = code.bytes();
+        popScope();
+        currentClassScope = null;
+
+        return code;
+    }
+
+    @Override
     public Code visitFile(SmalltalkParser.FileContext ctx) {
         currentScope = compiler.symtab.GLOBALS;
         Code code = visitChildren(ctx);
@@ -90,7 +103,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
                 Bytecode.RETURN
         ));
 
-        ((STMethod) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         ((STMethod) currentScope).compiledBlock.bytecode = code.bytes();
 
         popScope();
@@ -121,6 +133,8 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         if (ctx.localVars() != null) {
             visit(ctx.localVars());
         }
+        ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
+
         Code code = Code.None;
         for (SmalltalkParser.StatContext statContext : ctx.stat()) {
             code = aggregateResult(code, visit(statContext));
@@ -171,14 +185,26 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     }
 
     @Override
+    public Code visitLocalVars(SmalltalkParser.LocalVarsContext ctx) {
+        return super.visitLocalVars(ctx);
+    }
+
+    @Override
     public Code visitId(SmalltalkParser.IdContext ctx) {
-        return Code.of(
-                Bytecode.PUSH_LOCAL,
-                (short) 0,
-                (short) 0,
-                (short) 0,
-                (short) currentScope.getSymbol(ctx.ID().getText()).getInsertionOrderNumber()
-        );
+        String id = ctx.ID().getText();
+        int index = currentClassScope.stringTable.add(id);
+        switch (id) {
+            case "Transcript":
+                return Code.of(Bytecode.PUSH_GLOBAL, (short) 0, (short) index);
+            default:
+                return Code.of(
+                        Bytecode.PUSH_LOCAL,
+                        (short) 0,
+                        (short) 0,
+                        (short) 0,
+                        (short) currentScope.getSymbol(id).getInsertionOrderNumber()
+                );
+        }
     }
 
     @Override
