@@ -2,7 +2,10 @@ package smalltalk.compiler;
 
 import org.antlr.symtab.Scope;
 import org.antlr.symtab.VariableSymbol;
-import org.antlr.v4.runtime.*;
+import org.antlr.v4.runtime.CharStream;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
 import smalltalk.compiler.symbols.*;
 
@@ -35,6 +38,7 @@ public class Compiler {
         ParserRuleContext parserRuleContext = parseClasses(charStream);
         defSymbols(parserRuleContext);
         resolveSymbols(parserRuleContext);
+        generateCode(parserRuleContext);
 
         return symtab;
     }
@@ -70,13 +74,14 @@ public class Compiler {
         walker.walk(def, tree);
     }
 
+    public void generateCode(ParserRuleContext tree) {
+        CodeGenerator codeGenerator = new CodeGenerator(this);
+        codeGenerator.visit(tree);
+
+    }
 
     public STBlock createBlock(STMethod currentMethod, ParserRuleContext tree) {
         STBlock block = new STBlock(currentMethod, tree);
-        System.out.println(block.index);
-//		block.
-//		System.out.println("create block in "+currentMethod+" ");
-//		return null;
         return block;
     }
 
@@ -89,12 +94,11 @@ public class Compiler {
                                                    String selector,
                                                    String primitiveName,
                                                    SmalltalkParser.MethodContext tree) {
-        STPrimitiveMethod stPrimitiveMethod=new STPrimitiveMethod(selector,tree,primitiveName);
-        STPrimitiveMethod stPrimitiveMethod1= (STPrimitiveMethod) currentClass.resolve(stPrimitiveMethod.getName());
+        STPrimitiveMethod stPrimitiveMethod = new STPrimitiveMethod(selector, tree, primitiveName);
 //		System.out.println("	create primitive "+selector+" "+args+"->"+primitiveName);
         // convert "<classname>_<methodname>" Primitive value
         // warn if classname!=currentClass
-        return stPrimitiveMethod1;
+        return stPrimitiveMethod;
     }
 
 

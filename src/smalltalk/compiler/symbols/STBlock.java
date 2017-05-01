@@ -1,8 +1,10 @@
 package smalltalk.compiler.symbols;
 
 import org.antlr.symtab.MethodSymbol;
-import org.antlr.symtab.Scope;
 import org.antlr.v4.runtime.ParserRuleContext;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /** A block is an anonymous method defined within a method or another block.
  *  Ala gnu impl., blocks aren't stored en masse inline.
@@ -60,7 +62,7 @@ public class STBlock extends MethodSymbol {
 
 	public int nargs() { return 0; } // fill in
 
-	public int nlocals() { return 0; } // fill in
+	public int nlocals() { return getMembers().size(); } // fill in
 
 	/** Given the name of a local variable or argument, return the index from 0.
 	 *  The arguments come first and then the locals. For example,
