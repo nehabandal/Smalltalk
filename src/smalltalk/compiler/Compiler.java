@@ -8,11 +8,14 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
 import smalltalk.compiler.symbols.*;
-
+import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
+
+import static smalltalk.compiler.misc.Utils.shortToBytes;
+import static smalltalk.compiler.misc.Utils.toLiteral;
 
 public class Compiler {
     protected STSymbolTable symtab;
@@ -161,5 +164,9 @@ public class Compiler {
 
     public void error(String msg, Exception e) {
         errors.add(msg + "\n" + Arrays.toString(e.getStackTrace()));
+    }
+
+    public Code send(int size, int add) {
+        return Code.of(Bytecode.SEND).join(shortToBytes(size).join(toLiteral(add)));
     }
 }

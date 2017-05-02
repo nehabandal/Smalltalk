@@ -215,13 +215,19 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitLiteral(SmalltalkParser.LiteralContext ctx) {
         String id = ctx.getText();
+        if(id.contains("\'"))
+        {
+            id = id.replace("\'","");
+        }
         if (ctx.NUMBER() == null) {
             int index = currentClassScope.stringTable.add(id);
             return Code.of(Bytecode.PUSH_LITERAL, (short) 0, (short) index);
-        } else {
-            int index = currentClassScope.stringTable.size();
-            return Code.of(Bytecode.PUSH_INT, (short) 0);
+//        } else {
+//            int index = currentClassScope.stringTable.size();
+//            return Code.of(Bytecode.PUSH_INT, (short) 0);
+//        }
         }
+        return Code.None;
     }
 
     @Override
@@ -229,14 +235,17 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         return super.visitKeywordMethod(ctx);
     }
 
-    //    @Override
-//    public Code visitKeywordSend(SmalltalkParser.KeywordSendContext ctx) {
-//        String id = ctx.KEYWORD(0).getText();
-//        int index = currentClassScope.stringTable.add(id);
-//            Code code = sendKeywordMsg(ctx,Code.None,ctx.binaryExpression(),ctx.KEYWORD());
-//            return code;
-//
-//    }
+    @Override
+    public Code visitKeywordSend(SmalltalkParser.KeywordSendContext ctx) {
+        Code code = visit(ctx.recv);
+        for(SmalltalkParser.BinaryExpressionContext binaryExpressionContext : ctx.args)
+        {
+            code =aggregateResult(code,visit(binaryExpressionContext));
+        }
+        code = sendKeywordMsg(ctx.recv, code, ctx.args, ctx.KEYWORD());
+        return code;
+
+    }
 
     @Override
     public Code visitReturn(SmalltalkParser.ReturnContext ctx) {
@@ -297,7 +306,10 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
                                Code receiverCode,
                                List<SmalltalkParser.BinaryExpressionContext> args,
                                List<TerminalNode> keywords) {
-        return null;
+        Code code = receiverCode;
+        Code e = compiler.send(args.size(),currentClassScope.stringTable.add(keywords.get(0).getText()));
+        Code codenew = aggregateResult(code,e);
+        return codenew;
     }
 
     public String getProgramSourceForSubtree(ParserRuleContext ctx) {
