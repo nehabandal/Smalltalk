@@ -5,7 +5,6 @@ import org.antlr.symtab.VariableSymbol;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
-import org.stringtemplate.v4.compiler.STParser;
 import smalltalk.compiler.symbols.*;
 
 import java.util.List;
@@ -16,7 +15,7 @@ import java.util.List;
  */
 public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public static final boolean dumpCode = false;
-
+    int index;
     public STClass currentClassScope;
     public Scope currentScope;
 
@@ -53,13 +52,19 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitMain(SmalltalkParser.MainContext ctx) {
         currentClassScope = ctx.classScope;
-        pushScope(ctx.scope);
-        Code code = visit(ctx.body());
-
-        ((STBlock) currentScope).compiledBlock.bytecode = code.bytes();
-        popScope();
-        currentClassScope = null;
-
+        Code code = Code.None;
+        if (currentClassScope != null) {
+            pushScope(ctx.scope);
+            code = visit(ctx.body());
+            code = aggregateResult(code, Code.of(
+                    Bytecode.POP,
+                    Bytecode.SELF,
+                    Bytecode.RETURN
+            ));
+            ((STBlock) currentScope).compiledBlock.bytecode = code.bytes();
+            popScope();
+            currentClassScope = null;
+        }
         return code;
     }
 
@@ -111,10 +116,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitSmalltalkMethodBlock(SmalltalkParser.SmalltalkMethodBlockContext ctx) {
-        System.out.println(ctx.selector);
-        System.out.println(ctx.args);
-//        compiler.defineLocals(currentScope,ctx.args);
-//        compiler.defineLocals(currentScope,);
         return visit(ctx.body());
     }
 
@@ -155,8 +156,12 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         VariableSymbol variableSymbol = (VariableSymbol) currentScope.resolve(ctx.ID().getText());
         if (variableSymbol instanceof STField) {
             return Code.of(Bytecode.STORE_FIELD, (short) 0, (short) 0);
-        }
-        return Code.None;
+        } else
+            return Code.of(Bytecode.STORE_LOCAL, (short) 0,
+                    (short) 0,
+                    (short) 0,
+                    (short) currentScope.getSymbol(ctx.getText()).getInsertionOrderNumber()
+            );
     }
 
     @Override
@@ -192,9 +197,9 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitId(SmalltalkParser.IdContext ctx) {
         String id = ctx.ID().getText();
-        int index = currentClassScope.stringTable.add(id);
         switch (id) {
             case "Transcript":
+                int index = currentClassScope.stringTable.add(id);
                 return Code.of(Bytecode.PUSH_GLOBAL, (short) 0, (short) index);
             default:
                 return Code.of(
@@ -206,6 +211,32 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
                 );
         }
     }
+
+    @Override
+    public Code visitLiteral(SmalltalkParser.LiteralContext ctx) {
+        String id = ctx.getText();
+        if (ctx.NUMBER() == null) {
+            int index = currentClassScope.stringTable.add(id);
+            return Code.of(Bytecode.PUSH_LITERAL, (short) 0, (short) index);
+        } else {
+            int index = currentClassScope.stringTable.size();
+            return Code.of(Bytecode.PUSH_INT, (short) 0);
+        }
+    }
+
+    @Override
+    public Code visitKeywordMethod(SmalltalkParser.KeywordMethodContext ctx) {
+        return super.visitKeywordMethod(ctx);
+    }
+
+    //    @Override
+//    public Code visitKeywordSend(SmalltalkParser.KeywordSendContext ctx) {
+//        String id = ctx.KEYWORD(0).getText();
+//        int index = currentClassScope.stringTable.add(id);
+//            Code code = sendKeywordMsg(ctx,Code.None,ctx.binaryExpression(),ctx.KEYWORD());
+//            return code;
+//
+//    }
 
     @Override
     public Code visitReturn(SmalltalkParser.ReturnContext ctx) {
