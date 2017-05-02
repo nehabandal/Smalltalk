@@ -166,7 +166,5 @@ public class Compiler {
         errors.add(msg + "\n" + Arrays.toString(e.getStackTrace()));
     }
 
-    public Code send(int size, int add) {
-        return Code.of(Bytecode.SEND).join(shortToBytes(size).join(toLiteral(add)));
-    }
+
 }

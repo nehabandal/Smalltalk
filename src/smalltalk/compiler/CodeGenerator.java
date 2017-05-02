@@ -9,6 +9,8 @@ import smalltalk.compiler.symbols.*;
 
 import java.util.List;
 
+import static smalltalk.compiler.misc.Utils.*;
+
 /**
  * Fill STBlock, STMethod objects in Symbol table with bytecode,
  * {@link STCompiledBlock}.
@@ -56,8 +58,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         if (currentClassScope != null) {
             pushScope(ctx.scope);
             code = visit(ctx.body());
-            code = aggregateResult(code, Code.of(
-                    Bytecode.POP,
+            code = code.join(Code.of(
                     Bytecode.SELF,
                     Bytecode.RETURN
             ));
@@ -79,15 +80,15 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitClassDef(SmalltalkParser.ClassDefContext ctx) {
         currentClassScope = ctx.scope;
         pushScope(ctx.scope);
-
-        visit(ctx.instanceVars());
+//        visit(ctx.instanceVars());
         Code code = Code.None;
         for (SmalltalkParser.ClassMethodContext classMethodContext : ctx.classMethod()) {
-            code = aggregateResult(code, visit(classMethodContext));
+            code = code.join(visit(classMethodContext));
         }
         for (SmalltalkParser.MethodContext methodContext : ctx.method()) {
-            code = aggregateResult(code, visit(methodContext));
+            code = code.join(visit(methodContext));
         }
+
         popScope();
         currentClassScope = null;
         return code;
@@ -102,13 +103,14 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitNamedMethod(SmalltalkParser.NamedMethodContext ctx) {
         pushScope(ctx.scope);
         Code code = visit(ctx.methodBlock());
-        code = aggregateResult(code, Code.of(
-                Bytecode.POP,
+        code = code.join(Code.of(
                 Bytecode.SELF,
                 Bytecode.RETURN
         ));
-
-        ((STMethod) currentScope).compiledBlock.bytecode = code.bytes();
+        if (((STMethod) currentScope).compiledBlock != null)
+            ((STMethod) currentScope).compiledBlock.bytecode = code.bytes();
+        else
+            ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
 
         popScope();
         return code;
@@ -116,9 +118,14 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitSmalltalkMethodBlock(SmalltalkParser.SmalltalkMethodBlockContext ctx) {
+
         return visit(ctx.body());
     }
 
+    @Override
+    public Code visitPrimitiveMethodBlock(SmalltalkParser.PrimitiveMethodBlockContext ctx) {
+        return visit(ctx.SYMBOL());
+    }
 
     /**
      * All expressions have values. Must pop each expression value off, except
@@ -134,12 +141,21 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         if (ctx.localVars() != null) {
             visit(ctx.localVars());
         }
-        ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
-
         Code code = Code.None;
+
         for (SmalltalkParser.StatContext statContext : ctx.stat()) {
-            code = aggregateResult(code, visit(statContext));
+            code = code.join(visit(statContext));
+            ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         }
+
+        return code;
+    }
+
+    @Override
+    public Code visitBlock(SmalltalkParser.BlockContext ctx) {
+        Code code = Code.None;
+        code = code.join(visit(ctx.body()));
+        ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         return code;
     }
 
@@ -155,13 +171,17 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitLvalue(SmalltalkParser.LvalueContext ctx) {
         VariableSymbol variableSymbol = (VariableSymbol) currentScope.resolve(ctx.ID().getText());
         if (variableSymbol instanceof STField) {
-            return Code.of(Bytecode.STORE_FIELD, (short) 0, (short) 0);
-        } else
-            return Code.of(Bytecode.STORE_LOCAL, (short) 0,
+            Code code = Code.of(Bytecode.STORE_FIELD, (short) 0, (short) 0);
+            code = aggregateResult(code, Code.of(Bytecode.POP));
+            return code;
+        } else {
+            Code code = Code.of(Bytecode.STORE_LOCAL, (short) 0,
                     (short) 0,
                     (short) 0,
-                    (short) currentScope.getSymbol(ctx.getText()).getInsertionOrderNumber()
-            );
+                    (short) currentScope.getSymbol(ctx.getText()).getInsertionOrderNumber());
+            code = aggregateResult(code, Code.of(Bytecode.POP));
+            return code;
+        }
     }
 
     @Override
@@ -178,7 +198,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitBinaryExpression(SmalltalkParser.BinaryExpressionContext ctx) {
         Code code = Code.None;
         for (SmalltalkParser.UnaryExpressionContext unaryExpressionContext : ctx.unaryExpression()) {
-            code = aggregateResult(code, visit(unaryExpressionContext));
+            code = code.join(visit(unaryExpressionContext));
         }
 
         return code;
@@ -200,7 +220,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         switch (id) {
             case "Transcript":
                 int index = currentClassScope.stringTable.add(id);
-                return Code.of(Bytecode.PUSH_GLOBAL, (short) 0, (short) index);
+                return Code.of(Bytecode.PUSH_GLOBAL).join(toLiteral(index));
             default:
                 return Code.of(
                         Bytecode.PUSH_LOCAL,
@@ -215,19 +235,16 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitLiteral(SmalltalkParser.LiteralContext ctx) {
         String id = ctx.getText();
-        if(id.contains("\'"))
-        {
-            id = id.replace("\'","");
+        if (id.contains("\'")) {
+            id = id.replace("\'", "");
         }
         if (ctx.NUMBER() == null) {
             int index = currentClassScope.stringTable.add(id);
-            return Code.of(Bytecode.PUSH_LITERAL, (short) 0, (short) index);
-//        } else {
-//            int index = currentClassScope.stringTable.size();
-//            return Code.of(Bytecode.PUSH_INT, (short) 0);
-//        }
+            return Code.of(Bytecode.PUSH_LITERAL).join(toLiteral(index));
+        } else {
+            int index = currentClassScope.stringTable.size();
+            return Code.of(Bytecode.PUSH_INT).join(intToBytes(index));
         }
-        return Code.None;
     }
 
     @Override
@@ -238,9 +255,8 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitKeywordSend(SmalltalkParser.KeywordSendContext ctx) {
         Code code = visit(ctx.recv);
-        for(SmalltalkParser.BinaryExpressionContext binaryExpressionContext : ctx.args)
-        {
-            code =aggregateResult(code,visit(binaryExpressionContext));
+        for (SmalltalkParser.BinaryExpressionContext binaryExpressionContext : ctx.args) {
+            code = code.join(visit(binaryExpressionContext));
         }
         code = sendKeywordMsg(ctx.recv, code, ctx.args, ctx.KEYWORD());
         return code;
@@ -307,8 +323,9 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
                                List<SmalltalkParser.BinaryExpressionContext> args,
                                List<TerminalNode> keywords) {
         Code code = receiverCode;
-        Code e = compiler.send(args.size(),currentClassScope.stringTable.add(keywords.get(0).getText()));
-        Code codenew = aggregateResult(code,e);
+        Code e = Code.of(Bytecode.SEND).join(shortToBytes(args.size()).join(toLiteral(currentClassScope.stringTable.add(keywords.get(0).getText()))));
+        Code codepop = aggregateResult(e, Code.of(Bytecode.POP));
+        Code codenew = aggregateResult(code, codepop);
         return codenew;
     }
 
