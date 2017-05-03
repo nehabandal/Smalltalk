@@ -58,10 +58,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         if (currentClassScope != null) {
             pushScope(ctx.scope);
             code = visit(ctx.body());
-            code = code.join(Code.of(
-                    Bytecode.SELF,
-                    Bytecode.RETURN
-            ));
             ((STBlock) currentScope).compiledBlock.bytecode = code.bytes();
             popScope();
             currentClassScope = null;
@@ -80,7 +76,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitClassDef(SmalltalkParser.ClassDefContext ctx) {
         currentClassScope = ctx.scope;
         pushScope(ctx.scope);
-//        visit(ctx.instanceVars());
         Code code = Code.None;
         for (SmalltalkParser.ClassMethodContext classMethodContext : ctx.classMethod()) {
             code = code.join(visit(classMethodContext));
@@ -88,7 +83,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         for (SmalltalkParser.MethodContext methodContext : ctx.method()) {
             code = code.join(visit(methodContext));
         }
-
         popScope();
         currentClassScope = null;
         return code;
@@ -103,10 +97,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitNamedMethod(SmalltalkParser.NamedMethodContext ctx) {
         pushScope(ctx.scope);
         Code code = visit(ctx.methodBlock());
-        code = code.join(Code.of(
-                Bytecode.SELF,
-                Bytecode.RETURN
-        ));
+
         if (((STMethod) currentScope).compiledBlock != null)
             ((STMethod) currentScope).compiledBlock.bytecode = code.bytes();
         else
@@ -118,13 +109,12 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitSmalltalkMethodBlock(SmalltalkParser.SmalltalkMethodBlockContext ctx) {
-
         return visit(ctx.body());
     }
 
     @Override
     public Code visitPrimitiveMethodBlock(SmalltalkParser.PrimitiveMethodBlockContext ctx) {
-        return visit(ctx.SYMBOL());
+        return Code.None;
     }
 
     /**
@@ -147,7 +137,22 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
             code = code.join(visit(statContext));
             ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         }
+        code = code.join(Code.of(
+                Bytecode.SELF,
+                Bytecode.RETURN
+        ));
+        return code;
+    }
 
+    @Override
+    public Code visitEmptyBody(SmalltalkParser.EmptyBodyContext ctx) {
+
+        ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
+        Code code = Code.None;
+        code = code.join(Code.of(
+                Bytecode.SELF,
+                Bytecode.RETURN
+        ));
         return code;
     }
 
