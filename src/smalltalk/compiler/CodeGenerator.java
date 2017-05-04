@@ -153,12 +153,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         return code;
     }
 
-
-    @Override
-    public Code visitSuperKeywordSend(SmalltalkParser.SuperKeywordSendContext ctx) {
-        return super.visitSuperKeywordSend(ctx);
-    }
-
     @Override
     public Code visitEmptyBody(SmalltalkParser.EmptyBodyContext ctx) {
         Code code = Code.None;
@@ -170,7 +164,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
                     Bytecode.RETURN
             ));
         }
-
         return code;
     }
 
@@ -202,10 +195,10 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitLvalue(SmalltalkParser.LvalueContext ctx) {
         Symbol sym = ctx.sym;
         if (sym instanceof STField) {
-            Code code = Code.of(Bytecode.STORE_FIELD, (short) 0, (short) 0);
+            Code code = Code.of(Bytecode.STORE_FIELD).join(shortToBytes(sym.getInsertionOrderNumber()));
             return code;
         } else {
-            Code code = Code.of(Bytecode.STORE_LOCAL).join (shortToBytes( 0)).join(shortToBytes(sym.getInsertionOrderNumber()));
+            Code code = Code.of(Bytecode.STORE_LOCAL).join(shortToBytes(0)).join(shortToBytes(sym.getInsertionOrderNumber()));
             return code;
         }
     }
@@ -221,28 +214,39 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     }
 
     @Override
+    public Code visitBop(SmalltalkParser.BopContext ctx) {
+        Code e = Code.None;
+        e = e.join(Code.of(Bytecode.SEND).join(shortToBytes(1).join(toLiteral(currentClassScope.stringTable.add(ctx.getText())))));
+        return e;
+    }
+
+    @Override
     public Code visitBinaryExpression(SmalltalkParser.BinaryExpressionContext ctx) {
         Code code = Code.None;
+        Code op = Code.None;
+        Code exp;
         for (SmalltalkParser.UnaryExpressionContext unaryExpressionContext : ctx.unaryExpression()) {
             code = code.join(visit(unaryExpressionContext));
         }
-        return code;
+        for (SmalltalkParser.BopContext bopContext : ctx.bop()) {
+            op = op.join(visitBop(bopContext));
+        }
+        exp = aggregateResult(code,op);
+        return exp;
     }
 
     @Override
     public Code visitOperatorMethod(SmalltalkParser.OperatorMethodContext ctx) {
         pushScope(ctx.scope);
-        Code code = visit(ctx.methodBlock());
         ctx.scope.compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
-        ctx.scope.compiledBlock.bytecode = code.bytes();
         popScope();
-        return code;
+        return Code.None;
     }
 
     @Override
     public Code visitKeywordMethod(SmalltalkParser.KeywordMethodContext ctx) {
         pushScope(ctx.scope);
-        Code code = visit(ctx.methodBlock());
+        Code code = visitChildren(ctx);
         ctx.scope.compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         ctx.scope.compiledBlock.bytecode = code.bytes();
         popScope();
@@ -298,6 +302,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         code = sendKeywordMsg(ctx.recv, code, ctx.args, ctx.KEYWORD());
         return code;
     }
+
 
     @Override
     public Code visitReturn(SmalltalkParser.ReturnContext ctx) {
