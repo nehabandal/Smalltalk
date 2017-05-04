@@ -60,9 +60,9 @@ public class STBlock extends MethodSymbol {
 
 	public boolean isMethod() { return false; }
 
-	public int nargs() { return 0; } // fill in
+	public int nargs() { return this.getNumberOfParameters(); } // fill in
 
-	public int nlocals() { return getMembers().size(); } // fill in
+	public int nlocals() { return this.getNumberOfVariables()-this.getNumberOfParameters(); } // fill in
 
 	/** Given the name of a local variable or argument, return the index from 0.
 	 *  The arguments come first and then the locals. For example,
