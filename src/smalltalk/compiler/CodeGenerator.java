@@ -152,6 +152,16 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     }
 
     @Override
+    public Code visitUnarySuperMsgSend(SmalltalkParser.UnarySuperMsgSendContext ctx) {
+        return super.visitUnarySuperMsgSend(ctx);
+    }
+
+    @Override
+    public Code visitSuperKeywordSend(SmalltalkParser.SuperKeywordSendContext ctx) {
+        return super.visitSuperKeywordSend(ctx);
+    }
+
+    @Override
     public Code visitEmptyBody(SmalltalkParser.EmptyBodyContext ctx) {
         ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         Code code = Code.None;
