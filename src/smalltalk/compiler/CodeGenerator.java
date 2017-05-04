@@ -64,7 +64,8 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
                     Bytecode.SELF,
                     Bytecode.RETURN
             ));
-            ((STBlock) currentScope).compiledBlock.bytecode = code.bytes();
+            ctx.scope.compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
+            ctx.scope.compiledBlock.bytecode = code.bytes();
             currentClassScope = null;
         }
 
@@ -98,8 +99,8 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitNamedMethod(SmalltalkParser.NamedMethodContext ctx) {
         pushScope(ctx.scope);
         Code code = visit(ctx.methodBlock());
-        ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
-        ((STMethod) currentScope).compiledBlock.bytecode = code.bytes();
+        ctx.scope.compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
+        ctx.scope.compiledBlock.bytecode = code.bytes();
         popScope();
         return code;
     }
@@ -107,14 +108,11 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitSmalltalkMethodBlock(SmalltalkParser.SmalltalkMethodBlockContext ctx) {
         Code code = visitChildren(ctx);
-        ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
-        ((STMethod) currentScope).compiledBlock.bytecode = code.bytes();
         return code;
     }
 
     @Override
     public Code visitPrimitiveMethodBlock(SmalltalkParser.PrimitiveMethodBlockContext ctx) {
-        ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         return Code.None;
     }
 
@@ -137,7 +135,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
             if (i != ctx.stat().size())
                 code = code.join(Code.of(
                         Bytecode.POP));
-            ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
 
         }
         if (currentScope instanceof STMethod)
@@ -151,10 +148,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         return code;
     }
 
-    @Override
-    public Code visitUnarySuperMsgSend(SmalltalkParser.UnarySuperMsgSendContext ctx) {
-        return super.visitUnarySuperMsgSend(ctx);
-    }
 
     @Override
     public Code visitSuperKeywordSend(SmalltalkParser.SuperKeywordSendContext ctx) {
@@ -163,7 +156,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitEmptyBody(SmalltalkParser.EmptyBodyContext ctx) {
-        ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         Code code = Code.None;
         if (currentClassScope.getName().equals("MainClass")) {
             code = Code.of(Bytecode.NIL);
@@ -197,7 +189,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         code = code.join(aggregateResult(
                 visit(ctx.messageExpression()),
                 visit(ctx.lvalue())));
-        //code = code.join(Code.of(Bytecode.POP));
         return code;
 
     }
@@ -241,8 +232,8 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitOperatorMethod(SmalltalkParser.OperatorMethodContext ctx) {
         pushScope(ctx.scope);
         Code code = visit(ctx.methodBlock());
-        ((STBlock) currentScope).compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
-        ((STMethod) currentScope).compiledBlock.bytecode = code.bytes();
+        ctx.scope.compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
+        ctx.scope.compiledBlock.bytecode = code.bytes();
         popScope();
         return code;
     }
@@ -256,7 +247,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
             count++;
             return code;
         } else if (sym instanceof VariableSymbol) {
-            return Code.of(Bytecode.PUSH_LOCAL).join(shortToBytes(0)).join(shortToBytes(currentScope.getSymbol(id).getInsertionOrderNumber()));
+            return Code.of(Bytecode.PUSH_LOCAL).join(shortToBytes(0)).join(shortToBytes(sym.getInsertionOrderNumber()));
         } else {
             int index = currentClassScope.stringTable.add(id);
             return Code.of(Bytecode.PUSH_GLOBAL).join(toLiteral(index));
