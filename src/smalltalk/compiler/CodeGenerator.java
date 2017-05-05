@@ -10,8 +10,6 @@ import smalltalk.compiler.symbols.*;
 
 import java.util.List;
 
-import static smalltalk.compiler.misc.Utils.*;
-
 /**
  * Fill STBlock, STMethod objects in Symbol table with bytecode,
  * {@link STCompiledBlock}.
@@ -25,7 +23,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
      * With which compiler are we generating code?
      */
     public final Compiler compiler;
-    int count = 0;
 
     public CodeGenerator(Compiler compiler) {
         this.compiler = compiler;
@@ -59,7 +56,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         if (currentClassScope != null) {
             pushScope(ctx.scope);
             code = visitChildren(ctx);
-            code = aggregateResult(code,Compiler.push_atEnd());
+            code = aggregateResult(code, Compiler.push_atEnd());
             ctx.scope.compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
             ctx.scope.compiledBlock.bytecode = code.bytes();
             currentClassScope = null;
@@ -79,10 +76,9 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitClassDef(SmalltalkParser.ClassDefContext ctx) {
         currentClassScope = ctx.scope;
         pushScope(ctx.scope);
-        Code code = Code.None;
+        Code code = defaultResult();
         code = code.join(visitChildren(ctx));
         popScope();
-        currentClassScope = null;
         return code;
     }
 
@@ -132,12 +128,12 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
             i++;
             code = code.join(visit(statContext));
             if (i != ctx.stat().size())
-                code = aggregateResult(code,Compiler.push_pop());
+                code = aggregateResult(code, Compiler.push_pop());
 
         }
         if (currentScope instanceof STMethod)
             if (!currentScope.getName().equals("main")) {
-                code = aggregateResult(code,Compiler.push_atEnd());
+                code = aggregateResult(code, Compiler.push_atEnd());
             }
         return code;
     }
@@ -146,12 +142,9 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitEmptyBody(SmalltalkParser.EmptyBodyContext ctx) {
         Code code = Code.None;
         if (currentClassScope.getName().equals("MainClass")) {
-            code = Code.of(Bytecode.NIL);
+            code = Compiler.push_nil();
         } else {
-            code = code.join(Code.of(
-                    Bytecode.SELF,
-                    Bytecode.RETURN
-            ));
+            code = code.join(Compiler.push_self_return());
         }
         return code;
     }
@@ -161,9 +154,9 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         currentScope = ctx.scope;
         pushScope(currentScope);
         STBlock block = (STBlock) currentScope;
-        Code blkcode = Code.of(Bytecode.BLOCK).join(shortToBytes(block.index));
+        Code blkcode = Compiler.push_block(block.index);
         Code code = visitChildren(ctx);
-        code = aggregateResult(code, Code.of(Bytecode.BLOCK_RETURN));
+        code = aggregateResult(code, Compiler.push_block_return());
         ctx.scope.compiledBlock = new STCompiledBlock(currentClassScope, block);
         ctx.scope.compiledBlock.bytecode = code.bytes();
         popScope();
@@ -173,7 +166,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitAssign(SmalltalkParser.AssignContext ctx) {
-        Code code = Code.None;
+        Code code = defaultResult();
         code = code.join(aggregateResult(
                 visit(ctx.messageExpression()),
                 visit(ctx.lvalue())));
@@ -185,10 +178,12 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitLvalue(SmalltalkParser.LvalueContext ctx) {
         Symbol sym = ctx.sym;
         if (sym instanceof STField) {
-            Code code = Code.of(Bytecode.STORE_FIELD).join(shortToBytes(sym.getInsertionOrderNumber()));
+            Code code = Compiler.push_store_field(sym.getInsertionOrderNumber());
             return code;
         } else {
-            Code code = Code.of(Bytecode.STORE_LOCAL).join(shortToBytes(0)).join(shortToBytes(sym.getInsertionOrderNumber()));
+            int i = sym.getInsertionOrderNumber();
+            int d = ((STBlock) currentScope).getRelativeScopeCount(sym.getScope().getName());
+            Code code = Compiler.push_store_local(d, i);
             return code;
         }
     }
@@ -205,25 +200,18 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitBop(SmalltalkParser.BopContext ctx) {
-        Code code = Code.of(Bytecode.SEND).join(shortToBytes(1).join(toLiteral(currentClassScope.stringTable.add(ctx.getText()))));
+        Code code = Compiler.push_send(1, currentClassScope.stringTable.add(ctx.getText()));
         return code;
     }
 
     @Override
     public Code visitBinaryExpression(SmalltalkParser.BinaryExpressionContext ctx) {
-        Code code = Code.None;
-        int i = 0, j = 0, k = 0;
-        List<SmalltalkParser.UnaryExpressionContext> unaryExpressionContexts = ctx.unaryExpression();
-        List<SmalltalkParser.BopContext> bopContexts = ctx.bop();
-        while (k < unaryExpressionContexts.size() + bopContexts.size()) {
-            code = code.join(visit(unaryExpressionContexts.get(i)));
-            i++;
-            k++;
-            if (i > 1) {
-                code = code.join(visit(ctx.bop(j)));
-                j++;
+        Code code = visit(ctx.unaryExpression(0));
+        if (ctx.unaryExpression().size() >= 2) {
+            for (int i = 1; i < ctx.unaryExpression().size(); i++) {
+                code = aggregateResult(code, visit(ctx.unaryExpression(i)));
+                code = aggregateResult(code, visit(ctx.bop(i - 1)));
             }
-            k++;
         }
         return code;
     }
@@ -251,15 +239,16 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         String id = ctx.ID().getText();
         Code code = Code.None;
         Symbol sym = ctx.sym;
-        int i = 0;
         if (sym instanceof STField) {
-            code = code.join(Code.of(Bytecode.PUSH_FIELD).join(shortToBytes(((STBlock) currentScope).getLocalIndex(ctx.ID().getText()))));
+            code = aggregateResult(code, Compiler.push_field(((STBlock) currentScope).getLocalIndex(ctx.ID().getText())));
             return code;
         } else if (sym instanceof VariableSymbol) {
-            return code.join(Code.of(Bytecode.PUSH_LOCAL).join(shortToBytes(0)).join(shortToBytes(sym.getInsertionOrderNumber())));
+            int i = sym.getInsertionOrderNumber();
+            int d = ((STBlock) currentScope).getRelativeScopeCount(sym.getScope().getName());
+            return aggregateResult(code, Compiler.push_local(d, i));
         } else {
             int index = currentClassScope.stringTable.add(id);
-            return code.join(Code.of(Bytecode.PUSH_GLOBAL).join(toLiteral(index)));
+            return aggregateResult(code, Compiler.push_global(index));
         }
     }
 
@@ -270,20 +259,20 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
             id = id.replace("\'", "");
         }
         if (id.equals("true")) {
-            return Code.of(Bytecode.TRUE);
+            return Compiler.push_true();
         } else if (id.equals("false")) {
-            return Code.of(Bytecode.FALSE);
+            return Compiler.push_false();
         } else if (id.equals("nil")) {
-            return Code.of(Bytecode.NIL);
+            return Compiler.push_nil();
         } else if (id.equals("self")) {
-            return Code.of(Bytecode.SELF);
+            return Compiler.push_self();
         }
         if (ctx.NUMBER() == null) {
             int index = currentClassScope.stringTable.add(id);
-            return Code.of(Bytecode.PUSH_LITERAL).join(toLiteral(index));
+            return Compiler.push_literal(index);
         } else {
             int num = Integer.parseInt(ctx.getText());
-            return Code.of(Bytecode.PUSH_INT).join(intToBytes(num));
+            return Compiler.push_int(num);
         }
     }
 
@@ -300,15 +289,15 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitUnarySuperMsgSend(SmalltalkParser.UnarySuperMsgSendContext ctx) {
-        Code code = Code.of(Bytecode.SELF);
-        code = code.join(Code.of(Bytecode.SEND_SUPER).join(shortToBytes(0).join(toLiteral(currentClassScope.stringTable.add(ctx.ID().getText())))));
+        Code code = Compiler.push_self();
+        code = aggregateResult(code, Compiler.push_send_super(0, currentClassScope.stringTable.add(ctx.ID().getText())));
         return code;
     }
 
     @Override
     public Code visitUnaryMsgSend(SmalltalkParser.UnaryMsgSendContext ctx) {
         Code code = visitChildren(ctx);
-        code = code.join(Code.of(Bytecode.SEND).join(shortToBytes(0).join(toLiteral(currentClassScope.stringTable.add(ctx.ID().getText())))));
+        code = aggregateResult(code, Compiler.push_send(0, currentClassScope.stringTable.add(ctx.ID().getText())));
         return code;
     }
 
@@ -377,7 +366,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         for (int i = 1; i < keywords.size(); i++) {
             sb.append(keywords.get(i));
         }
-        Code e = Code.of(Bytecode.SEND).join(shortToBytes(args.size()).join(toLiteral(currentClassScope.stringTable.add(sb.toString()))));
+        Code e = Compiler.push_send(args.size(), currentClassScope.stringTable.add(sb.toString()));
         Code codenew = aggregateResult(code, e);
         return codenew;
     }
@@ -385,5 +374,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public String getProgramSourceForSubtree(ParserRuleContext ctx) {
         return null;
     }
+
 
 }

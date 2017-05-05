@@ -41,11 +41,9 @@ public class STBlock extends MethodSymbol {
      * It's also used to conjure up the method name; see constructor.
      */
     public final int index;
-    public Scope scope;
 
     public int numNestedBlocks;
 
-    public int scopeNum;
     public STCompiledBlock compiledBlock;
 
     /**
@@ -101,19 +99,16 @@ public class STBlock extends MethodSymbol {
      * jump to find name. 0 indicates same scope.
      */
     public int getRelativeScopeCount(String name) {
-        for (Symbol s : scope.getAllSymbols()) {
-            if (s.getName().equals(name)) {
-                return scopeNum;
+        int scopnum = 0;
+        Scope scope = this;
+        while (!scope.getName().equals(name)) {
+            scope = scope.getEnclosingScope();
+            if (scope != null) {
+                scopnum++;
+            } else {
+                return -1;
             }
         }
-        scopeNum++;
-        scope = scope.getEnclosingScope();
-        if (scope != null) {
-            getRelativeScopeCount(name);
-            return scopeNum;
-        } else {
-            return -1;
-        }
-
+        return scopnum;
     }
 }

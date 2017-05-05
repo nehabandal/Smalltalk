@@ -14,6 +14,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 
+import static smalltalk.compiler.misc.Utils.*;
+
 public class Compiler {
     protected STSymbolTable symtab;
     protected SmalltalkParser parser;
@@ -141,10 +143,64 @@ public class Compiler {
         return Code.of(Bytecode.POP);
     }
 
+    public static Code push_self_return() {
+        return Code.of(Bytecode.SELF, Bytecode.RETURN);
+    }
 
+    public static Code push_block_return() {
+        return Code.of(Bytecode.BLOCK_RETURN);
+    }
+
+    public static Code push_block(int index) {
+        return Code.of(Bytecode.BLOCK).join(shortToBytes(index));
+    }
+
+    public static Code push_store_field(int index) {
+        return Code.of(Bytecode.STORE_FIELD).join(shortToBytes(index));
+    }
+
+    public static Code push_store_local(int arg, int index) {
+        return Code.of(Bytecode.STORE_LOCAL).join(shortToBytes(arg)).join(shortToBytes(index));
+    }
+
+    public static Code push_send(int arg, int index) {
+        return Code.of(Bytecode.SEND).join(shortToBytes(arg).join(toLiteral(index)));
+    }
+
+    public static Code push_field(int arg) {
+        return Code.of(Bytecode.PUSH_FIELD).join(shortToBytes(arg));
+    }
+
+    public static Code push_local(int arg, int index) {
+        return Code.of(Bytecode.PUSH_LOCAL).join(shortToBytes(arg)).join(shortToBytes(index));
+    }
+
+    public static Code push_global(int index) {
+        return Code.of(Bytecode.PUSH_GLOBAL).join(toLiteral(index));
+    }
+
+    public static Code push_true() {
+        return Code.of(Bytecode.TRUE);
+    }
+
+    public static Code push_false() {
+        return Code.of(Bytecode.FALSE);
+    }
 
     public static Code push_self() {
         return Code.of(Bytecode.SELF);
+    }
+
+    public static Code push_literal(int index) {
+        return Code.of(Bytecode.PUSH_LITERAL).join(toLiteral(index));
+    }
+
+    public static Code push_int(int num) {
+        return Code.of(Bytecode.PUSH_INT).join(intToBytes(num));
+    }
+
+    public static Code push_send_super(int arg, int num) {
+        return Code.of(Bytecode.SEND_SUPER).join(shortToBytes(arg).join(toLiteral(num)));
     }
 
     public static Code method_return() {
