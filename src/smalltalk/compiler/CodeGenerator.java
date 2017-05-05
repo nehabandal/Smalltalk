@@ -34,8 +34,8 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
      */
     @Override
     protected Code aggregateResult(Code aggregate, Code nextResult) {
-        if (aggregate != Code.None) {
-            if (nextResult != Code.None) {
+        if (aggregate != defaultResult()) {
+            if (nextResult != defaultResult()) {
                 return aggregate.join(nextResult);
             }
             return aggregate;
@@ -52,7 +52,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitMain(SmalltalkParser.MainContext ctx) {
         currentClassScope = ctx.classScope;
-        Code code = Code.None;
+        Code code = defaultResult();
         if (currentClassScope != null) {
             pushScope(ctx.scope);
             code = visitChildren(ctx);
@@ -97,17 +97,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         return code;
     }
 
-    @Override
-    public Code visitSmalltalkMethodBlock(SmalltalkParser.SmalltalkMethodBlockContext ctx) {
-        Code code = visitChildren(ctx);
-        return code;
-    }
-
-    @Override
-    public Code visitPrimitiveMethodBlock(SmalltalkParser.PrimitiveMethodBlockContext ctx) {
-        return Code.None;
-    }
-
     /**
      * All expressions have values. Must pop each expression value off, except
      * last one, which is the block return value. Visit method for blocks will
@@ -119,32 +108,35 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
      */
     @Override
     public Code visitFullBody(SmalltalkParser.FullBodyContext ctx) {
-        Code code = Code.None;
+        Code code = defaultResult();
         if (ctx.localVars() != null) {
             code = code.join(visit(ctx.localVars()));
         }
-        int i = 0;
-        for (SmalltalkParser.StatContext statContext : ctx.stat()) {
-            i++;
+        List<SmalltalkParser.StatContext> stat = ctx.stat();
+        for (int i = 0; i < stat.size(); i++) {
+            SmalltalkParser.StatContext statContext = stat.get(i);
             code = code.join(visit(statContext));
-            if (i != ctx.stat().size())
+            if (i != stat.size() - 1) {
                 code = aggregateResult(code, Compiler.push_pop());
-
-        }
-        if (currentScope instanceof STMethod)
-            if (!currentScope.getName().equals("main")) {
-                code = aggregateResult(code, Compiler.push_atEnd());
             }
+        }
         return code;
     }
 
     @Override
+    public Code visitSmalltalkMethodBlock(SmalltalkParser.SmalltalkMethodBlockContext ctx) {
+        Code code = visit(ctx.body());
+        if(code == defaultResult()) {
+            return aggregateResult(code, Compiler.push_self_return());
+        }
+        return aggregateResult(code, Compiler.push_atEnd());
+    }
+
+    @Override
     public Code visitEmptyBody(SmalltalkParser.EmptyBodyContext ctx) {
-        Code code = Code.None;
+        Code code = defaultResult();
         if (currentClassScope.getName().equals("MainClass")) {
             code = Compiler.push_nil();
-        } else {
-            code = code.join(Compiler.push_self_return());
         }
         return code;
     }
@@ -221,7 +213,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         pushScope(ctx.scope);
         ctx.scope.compiledBlock = new STCompiledBlock(currentClassScope, (STBlock) currentScope);
         popScope();
-        return Code.None;
+        return defaultResult();
     }
 
     @Override
@@ -237,7 +229,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitId(SmalltalkParser.IdContext ctx) {
         String id = ctx.ID().getText();
-        Code code = Code.None;
+        Code code = defaultResult();
         Symbol sym = ctx.sym;
         if (sym instanceof STField) {
             code = aggregateResult(code, Compiler.push_field(((STBlock) currentScope).getLocalIndex(ctx.ID().getText())));
@@ -278,7 +270,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitKeywordSend(SmalltalkParser.KeywordSendContext ctx) {
-        Code code = Code.None;
+        Code code = defaultResult();
         code = code.join(visit(ctx.recv));
         for (SmalltalkParser.BinaryExpressionContext binaryExpressionContext : ctx.args) {
             code = code.join(visit(binaryExpressionContext));

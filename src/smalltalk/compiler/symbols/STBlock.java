@@ -70,11 +70,11 @@ public class STBlock extends MethodSymbol {
 
     public int nargs() {
         return this.getNumberOfParameters();
-    } // fill in
+    }
 
     public int nlocals() {
         return this.getNumberOfVariables() - this.getNumberOfParameters();
-    } // fill in
+    }
 
     /**
      * Given the name of a local variable or argument, return the index from 0.
