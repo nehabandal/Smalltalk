@@ -170,13 +170,11 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     public Code visitLvalue(SmalltalkParser.LvalueContext ctx) {
         Symbol sym = ctx.sym;
         if (sym instanceof STField) {
-            Code code = Compiler.push_store_field(sym.getInsertionOrderNumber());
-            return code;
+            return Compiler.push_store_field(sym.getInsertionOrderNumber());
         } else {
             int i = sym.getInsertionOrderNumber();
             int d = ((STBlock) currentScope).getRelativeScopeCount(sym.getScope().getName());
-            Code code = Compiler.push_store_local(d, i);
-            return code;
+            return Compiler.push_store_local(d, i);
         }
     }
 
@@ -192,8 +190,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitBop(SmalltalkParser.BopContext ctx) {
-        Code code = Compiler.push_send(1, currentClassScope.stringTable.add(ctx.getText()));
-        return code;
+        return Compiler.push_send(1, currentClassScope.stringTable.add(ctx.getText()));
     }
 
     @Override
@@ -250,14 +247,15 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         if (id.contains("\'")) {
             id = id.replace("\'", "");
         }
-        if (id.equals("true")) {
-            return Compiler.push_true();
-        } else if (id.equals("false")) {
-            return Compiler.push_false();
-        } else if (id.equals("nil")) {
-            return Compiler.push_nil();
-        } else if (id.equals("self")) {
-            return Compiler.push_self();
+        switch (id) {
+            case "true":
+                return Compiler.push_true();
+            case "false":
+                return Compiler.push_false();
+            case "nil":
+                return Compiler.push_nil();
+            case "self":
+                return Compiler.push_self();
         }
         if (ctx.NUMBER() == null) {
             int index = currentClassScope.stringTable.add(id);
@@ -299,8 +297,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         if (compiler.genDbg) {
             e = Code.join(e, dbg(ctx.start)); // put dbg after expression as that is when it executes
         }
-        Code code = e.join(Compiler.method_return());
-        return code;
+        return e.join(Compiler.method_return());
     }
 
     public void pushScope(Scope scope) {
@@ -352,15 +349,13 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
                                Code receiverCode,
                                List<SmalltalkParser.BinaryExpressionContext> args,
                                List<TerminalNode> keywords) {
-        Code code = receiverCode;
         StringBuilder sb = new StringBuilder();
         sb.append(keywords.get(0));
         for (int i = 1; i < keywords.size(); i++) {
             sb.append(keywords.get(i));
         }
         Code e = Compiler.push_send(args.size(), currentClassScope.stringTable.add(sb.toString()));
-        Code codenew = aggregateResult(code, e);
-        return codenew;
+        return aggregateResult(receiverCode, e);
     }
 
     public String getProgramSourceForSubtree(ParserRuleContext ctx) {
