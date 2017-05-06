@@ -190,7 +190,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitBop(SmalltalkParser.BopContext ctx) {
-        return Compiler.push_send(1, currentClassScope.stringTable.add(ctx.getText()));
+        return Compiler.push_send(1, getLiteralIndex(ctx.getText()));
     }
 
     @Override
@@ -236,7 +236,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
             int d = ((STBlock) currentScope).getRelativeScopeCount(sym.getScope().getName());
             return aggregateResult(code, Compiler.push_local(d, i));
         } else {
-            int index = currentClassScope.stringTable.add(id);
+            int index = getLiteralIndex(id);
             return aggregateResult(code, Compiler.push_global(index));
         }
     }
@@ -258,7 +258,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
                 return Compiler.push_self();
         }
         if (ctx.NUMBER() == null) {
-            int index = currentClassScope.stringTable.add(id);
+            int index = getLiteralIndex(id);
             return Compiler.push_literal(index);
         } else {
             int num = Integer.parseInt(ctx.getText());
@@ -280,14 +280,14 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitUnarySuperMsgSend(SmalltalkParser.UnarySuperMsgSendContext ctx) {
         Code code = Compiler.push_self();
-        code = aggregateResult(code, Compiler.push_send_super(0, currentClassScope.stringTable.add(ctx.ID().getText())));
+        code = aggregateResult(code, Compiler.push_send_super(0, getLiteralIndex(ctx.ID().getText())));
         return code;
     }
 
     @Override
     public Code visitUnaryMsgSend(SmalltalkParser.UnaryMsgSendContext ctx) {
         Code code = visitChildren(ctx);
-        code = aggregateResult(code, Compiler.push_send(0, currentClassScope.stringTable.add(ctx.ID().getText())));
+        code = aggregateResult(code, Compiler.push_send(0, getLiteralIndex(ctx.ID().getText())));
         return code;
     }
 
@@ -315,7 +315,8 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     }
 
     public int getLiteralIndex(String s) {
-        return 0;
+        int index = currentClassScope.stringTable.add(s);
+        return index;
     }
 
     public Code dbgAtEndMain(Token t) {
@@ -354,7 +355,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
         for (int i = 1; i < keywords.size(); i++) {
             sb.append(keywords.get(i));
         }
-        Code e = Compiler.push_send(args.size(), currentClassScope.stringTable.add(sb.toString()));
+        Code e = Compiler.push_send(args.size(), getLiteralIndex(sb.toString()));
         return aggregateResult(receiverCode, e);
     }
 
