@@ -163,7 +163,6 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
                 visit(ctx.messageExpression()),
                 visit(ctx.lvalue())));
         return code;
-
     }
 
     @Override
