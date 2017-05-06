@@ -126,7 +126,7 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
     @Override
     public Code visitSmalltalkMethodBlock(SmalltalkParser.SmalltalkMethodBlockContext ctx) {
         Code code = visit(ctx.body());
-        if(code == defaultResult()) {
+        if (code == defaultResult()) {
             return aggregateResult(code, Compiler.push_self_return());
         }
         return aggregateResult(code, Compiler.push_atEnd());
@@ -134,11 +134,11 @@ public class CodeGenerator extends SmalltalkBaseVisitor<Code> {
 
     @Override
     public Code visitEmptyBody(SmalltalkParser.EmptyBodyContext ctx) {
-        Code code = defaultResult();
-        if (currentClassScope.getName().equals("MainClass")) {
-            code = Compiler.push_nil();
+        if (currentScope instanceof STMethod) {
+            return defaultResult();
+        } else {
+            return Compiler.push_nil();
         }
-        return code;
     }
 
     @Override
